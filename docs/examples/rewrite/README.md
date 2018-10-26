@@ -20,78 +20,15 @@ Rewriting can be controlled using the following annotations:
 |nginx.ingress.kubernetes.io/app-root|Defines the Application Root that the Controller must redirect if it's in '/' context|string|
 |nginx.ingress.kubernetes.io/use-regex|Indicates if the paths defined on an Ingress use regular expressions|bool|
 
-## Validation
+## Examples
 
 ### Rewrite Target
 
-Create an Ingress rule with a rewrite annotation:
-
-```console
-$ echo "
-apiVersion: extensions/v1beta1
-kind: Ingress
-metadata:
-  annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /
-  name: rewrite
-  namespace: default
-spec:
-  rules:
-  - host: rewrite.bar.com
-    http:
-      paths:
-      - backend:
-          serviceName: http-svc
-          servicePort: 80
-        path: /something
-" | kubectl create -f -
-```
-
-Check the rewrite is working
-
-```
-$ curl -v http://172.17.4.99/something -H 'Host: rewrite.bar.com'
-*   Trying 172.17.4.99...
-* Connected to 172.17.4.99 (172.17.4.99) port 80 (#0)
-> GET /something HTTP/1.1
-> Host: rewrite.bar.com
-> User-Agent: curl/7.43.0
-> Accept: */*
->
-< HTTP/1.1 200 OK
-< Server: nginx/1.11.0
-< Date: Tue, 31 May 2016 16:07:31 GMT
-< Content-Type: text/plain
-< Transfer-Encoding: chunked
-< Connection: keep-alive
-<
-CLIENT VALUES:
-client_address=10.2.56.9
-command=GET
-real path=/
-query=nil
-request_version=1.1
-request_uri=http://rewrite.bar.com:8080/
-
-SERVER VALUES:
-server_version=nginx: 1.9.11 - lua: 10001
-
-HEADERS RECEIVED:
-accept=*/*
-connection=close
-host=rewrite.bar.com
-user-agent=curl/7.43.0
-x-forwarded-for=10.2.56.1
-x-forwarded-host=rewrite.bar.com
-x-forwarded-port=80
-x-forwarded-proto=http
-x-real-ip=10.2.56.1
-BODY:
-* Connection #0 to host 172.17.4.99 left intact
--no body in request-
-```
-
-### Rewrite Target With Regex Parameters
+!!! attention
+    Starting in Version 0.2.2, ingress definitions using the annotation `nginx.ingress.kubernetes.io/rewrite-target` are not backwards compatible with previous versions. Starting in Version 0.2.2, any substrings within the request URI that are to be passed to the rewritten path must explicitly be defined in a [capture group](https://www.regular-expressions.info/refcapture.html).
+    
+!!! note
+    [Captured groups](https://www.regular-expressions.info/refcapture.html) are saved chronologically, in numbered placeholders in the form `$1`, `$2` ... `$n`. These placeholders can be used as parameters in the `rewrite-target` annotation. 
 
 Create an Ingress rule with a rewrite annotation:
 
@@ -112,11 +49,16 @@ spec:
       - backend:
           serviceName: http-svc
           servicePort: 80
-        path: /something/(.+)
+        path: /something/?(.*)
 " | kubectl create -f -
 ```
 
-In this case a request to `rewrite.bar.com/something/new` will redirect to `rewrite.bar.com/new`.
+In this ingress definition, any characters captured by `(.*)` will be assigned to the placeholder `$1`, which is then used as a parameter in the `rewrite-target` annotation. 
+
+For example, the ingress definition above will result in the following rewrites:
+- `rewrite.bar.com/something` rewrites to `rewrite.bar.com/`
+- `rewrite.bar.com/something/` rewrites to `rewrite.bar.com/`
+- `rewrite.bar.com/something/new` rewrites to `rewrite.bar.com/new`
 
 ### App Root
 
