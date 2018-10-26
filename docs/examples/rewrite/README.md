@@ -25,10 +25,10 @@ Rewriting can be controlled using the following annotations:
 ### Rewrite Target
 
 !!! attention
-    Starting in Version 0.2.2, ingress definitions using the annotation `nginx.ingress.kubernetes.io/rewrite-target` are not backwards compatible with previous versions. Starting in Version 0.2.2, any substrings within the request URI that are to be passed to the rewritten path must explicitly be defined in a [capture group](https://www.regular-expressions.info/refcapture.html).
+    Starting in Version 0.2.2, ingress definitions using the annotation `nginx.ingress.kubernetes.io/rewrite-target` are not backwards compatible with previous versions. In Version 0.2.2 and beyond, any substrings within the request URI that need to be passed to the rewritten path must explicitly be defined in a [capture group](https://www.regular-expressions.info/refcapture.html).
     
 !!! note
-    [Captured groups](https://www.regular-expressions.info/refcapture.html) are saved chronologically, in numbered placeholders in the form `$1`, `$2` ... `$n`. These placeholders can be used as parameters in the `rewrite-target` annotation. 
+    [Captured groups](https://www.regular-expressions.info/refcapture.html) are saved in numbered placeholders, chronologically, in the form `$1`, `$2` ... `$n`. These placeholders can be used as parameters in the `rewrite-target` annotation. 
 
 Create an Ingress rule with a rewrite annotation:
 
