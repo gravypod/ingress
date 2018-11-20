@@ -1122,6 +1122,28 @@ func (n *NGINXController) createServers(data []*extensions.Ingress,
 	return servers
 }
 
+func canMergeUpstreams(primary *ingress.Backend, alternative *ingress.Backend) bool {
+	if primary.Name != alternative.Name && !primary.NoServer {
+		return true
+	}
+
+	return false
+}
+
+// Performs the merge action and checks to ensure that one two alternative backends do not merge into each other
+func mergeAlternativeBackend(priUps *ingress.Backend, altUps *ingress.Backend) bool {
+	if priUps.NoServer {
+		glog.Warningf("unable to merge alternative backend %v into primary backend %v because %v is a primary backend",
+			altUps.Name, priUps.Name, priUps.Name)
+		return false
+	}
+
+	priUps.AlternativeBackends =
+		append(priUps.AlternativeBackends, altUps.Name)
+
+	return true
+}
+
 // Compares an Ingress of a potential alternative backend's rules with each existing server and finds matching host + path pairs.
 // If a match is found, we know that this server should back the alternative backend and add the alternative backend
 // to a backend's alternative list.
@@ -1133,16 +1155,24 @@ func mergeAlternativeBackends(ing *extensions.Ingress, upstreams map[string]*ing
 	if ing.Spec.Backend != nil {
 		upsName := upstreamName(ing.Namespace, ing.Spec.Backend.ServiceName, ing.Spec.Backend.ServicePort)
 
-		ups := upstreams[upsName]
+		altUps := upstreams[upsName]
 
-		for _, defLoc := range servers[defServerName].Locations {
-			if !upstreams[defLoc.Backend].NoServer {
+		merged := false
+
+		for _, loc := range servers[defServerName].Locations {
+			priUps := upstreams[loc.Backend]
+
+			if canMergeUpstreams(priUps, altUps) {
 				glog.Infof("matching backend %v found for alternative backend %v",
-					upstreams[defLoc.Backend].Name, ups.Name)
+					priUps.Name, altUps.Name)
 
-				upstreams[defLoc.Backend].AlternativeBackends =
-					append(upstreams[defLoc.Backend].AlternativeBackends, ups.Name)
+				merged = mergeAlternativeBackend(priUps, altUps)
 			}
+		}
+
+		if !merged {
+			glog.Warningf("unable to find real backend for alternative backend %v. Deleting.", altUps.Name)
+			delete(upstreams, altUps.Name)
 		}
 	}
 
@@ -1150,32 +1180,34 @@ func mergeAlternativeBackends(ing *extensions.Ingress, upstreams map[string]*ing
 		for _, path := range rule.HTTP.Paths {
 			upsName := upstreamName(ing.Namespace, path.Backend.ServiceName, path.Backend.ServicePort)
 
-			ups := upstreams[upsName]
+			altUps := upstreams[upsName]
 
 			merged := false
 
-			server := servers[rule.Host]
+			server, ok := servers[rule.Host]
+			if !ok {
+				glog.Errorf("cannot merge alternative backend %s into hostname %s that does not exist",
+					altUps.Name,
+					rule.Host)
+
+				continue
+			}
 
 			// find matching paths
-			for _, location := range server.Locations {
-				if location.Backend == defUpstreamName {
-					continue
-				}
+			for _, loc := range server.Locations {
+				priUps := upstreams[loc.Backend]
 
-				if location.Path == path.Path && !upstreams[location.Backend].NoServer {
+				if canMergeUpstreams(priUps, altUps) && loc.Path == path.Path {
 					glog.Infof("matching backend %v found for alternative backend %v",
-						upstreams[location.Backend].Name, ups.Name)
+						priUps.Name, altUps.Name)
 
-					upstreams[location.Backend].AlternativeBackends =
-						append(upstreams[location.Backend].AlternativeBackends, ups.Name)
-
-					merged = true
+					merged = mergeAlternativeBackend(priUps, altUps)
 				}
 			}
 
 			if !merged {
-				glog.Warningf("unable to find real backend for alternative backend %v. Deleting.", ups.Name)
-				delete(upstreams, ups.Name)
+				glog.Warningf("unable to find real backend for alternative backend %v. Deleting.", altUps.Name)
+				delete(upstreams, altUps.Name)
 			}
 		}
 	}
