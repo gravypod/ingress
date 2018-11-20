@@ -153,6 +153,7 @@ func (n *NGINXController) syncIngress(interface{}) error {
 		Servers:               servers,
 		PassthroughBackends:   passUpstreams,
 		BackendConfigChecksum: n.store.GetBackendConfiguration().Checksum,
+		ControllerPods:        n.store.ListControllerPods(),
 	}
 
 	if n.runningConfig.Equal(pcfg) {
